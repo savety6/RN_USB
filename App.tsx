@@ -30,6 +30,16 @@ export default function App() {
 			console.error(e);
 		}
 	}
+
+	const handleSendPromise = async () => {
+		try {
+			const result = await CalendarModule.callDeviceDiscovery("what it is that it is");
+			console.log(result);
+		} catch (error) {
+			console.log(error);
+		}
+	}
+
 	return (
       	<View style={styles.conteiner}>
     		<Text>App</Text>
@@ -40,7 +50,11 @@ export default function App() {
 			/>
 			<Button
 				title="Create Callback"
-				onPress={() => CalendarModule.createCalendarCallback((res)=>console.log(res))}
+				onPress={() => CalendarModule.createCalendarCallback((res:string)=>console.log(res))}
+			/>
+			<Button
+				title="Send Promise"
+				onPress={handleSendPromise}
 			/>
 			<Button
 				title="Create Promise"

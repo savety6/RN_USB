@@ -53,7 +53,16 @@ public class CalendarModule extends ReactContextBaseJavaModule {
             promise.reject("error returned from promise ", err);
         }
     }
-
+    // promise that calls data to the java side
+    @ReactMethod
+    public void callDeviceDiscovery(String fromJSWorld, Promise promise){
+        try{
+            Log.d("masage from js: ", fromJSWorld);
+            promise.resolve("Device Discovery Completed");
+        }catch (Exception e){
+            promise.reject(e);
+        }
+    }
 
 
     private void sendEvent(ReactContext reactContext, String eventName, int params) {
