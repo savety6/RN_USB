@@ -22,7 +22,7 @@ export default function App() {
     console.log(CalendarModule);
 	
 	// CalendarModule.createCalendarEvent();
-	const handlePromise = async (res: string) => {
+	const handlePromise = async () => {
 		try {
 			const result = await CalendarModule.createCalendarPromise();
 			console.log(result);
