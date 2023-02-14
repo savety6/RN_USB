@@ -21,8 +21,8 @@ public class MyAppPackage implements ReactPackage {
             ReactApplicationContext reactContext) {
         List<NativeModule> modules = new ArrayList<>();
 
-        modules.add(new CalendarModule(reactContext));
-
+//        modules.add(new ReactNativeUsbModule(reactContext));
+        modules.add(new ReactNativeSimpleUsbModule(reactContext));
         return modules;
     }
 
