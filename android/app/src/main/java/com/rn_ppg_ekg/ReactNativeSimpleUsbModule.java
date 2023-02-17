@@ -1,80 +1,74 @@
 package com.rn_ppg_ekg;
+// imports
+import static android.app.Activity.RESULT_OK;
 
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.hardware.usb.*;
-import android.os.Build;
+
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import com.facebook.react.bridge.ActivityEventListener;
+import com.facebook.react.bridge.BaseActivityEventListener;
 import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
-import com.facebook.react.bridge.WritableNativeMap;
-import com.facebook.react.modules.core.DeviceEventManagerModule;
 
-import java.nio.ByteBuffer;
-import java.util.Iterator;
-import java.util.Locale;
+import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.bridge.Arguments;
+
+import com.rn_ppg_ekg.connectivity.DpadConnector;
+
 import java.util.Map;
 import java.util.HashMap;
 
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
+
+
+
+
 public class ReactNativeSimpleUsbModule extends ReactContextBaseJavaModule {
-    private static final String TAG = "ReactNative";
-    private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-    private static final int READ_INTERVAL = 50;
+    //private variables
+    private UsbManager usbManager;
+    private static final String TAG = "HC";
 
-    private ReactApplicationContext reactContext;
+    private DpadConnector mDpadConnector;
+    private ReactApplicationContext mReactContext;
 
-    private Object locker = new Object();
-    private UsbManager manager;
-    private UsbDevice device;
-    private UsbEndpoint endpointIn;
-    private UsbEndpoint endpointOut;
-    private UsbRequest request;
-    private UsbDeviceConnection connection;
-    private Promise connectionPromise;
+    //constructor
+    private final ActivityEventListener mActivityEventListener = new BaseActivityEventListener() {
 
+        private static final String ACTION_USB_PERMISSION = "com.rn_ppg_ekg.USB_PERMISSION";
+        private static final int VENDOR_ID = 0x303a;
+        private static final int PRODUCT_ID = 0x4001;
+        @Override
+        public void onNewIntent(Intent intent) {
+            super.onNewIntent(intent);
 
-
-    //My attempt
-    private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
-    private byte[] bytes;
-    private static int TIMEOUT = 1;
-    private boolean forceClaim = true;
-    private ByteBuffer buffer;
-    private UsbEndpoint endpoint;
-
-    final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (ACTION_USB_PERMISSION.equals(action)) {
-                synchronized (this) {
-                    UsbDevice device = (UsbDevice)intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-
-                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                        if(device != null){
-                            //call method to set up device communication
-                        }
-                    }
-                    else {
-                        Log.d(TAG, "permission denied for device " + device);
-                    }
-                }
+            if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(intent.getAction())) {
+                UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                connectDpad(device);
+                updateDpad();
             }
         }
     };
-
-    ReactNativeSimpleUsbModule(ReactApplicationContext reactContext){
+    public ReactNativeSimpleUsbModule(ReactApplicationContext reactContext) {
         super(reactContext);
-        this.reactContext = reactContext;
+        this.mReactContext = reactContext;
+        reactContext.addActivityEventListener(mActivityEventListener);
+        usbManager = (UsbManager) reactContext.getSystemService(Context.USB_SERVICE);
+        registerReceivers();
+        connectDpad(null);
     }
 
     @NonNull
@@ -83,97 +77,124 @@ public class ReactNativeSimpleUsbModule extends ReactContextBaseJavaModule {
         return "ReactNativeSimpleUsb";
     }
 
+    //list devices method implementation
     @ReactMethod
-    public void listUsbDevices(Promise promise) {
-        connectionPromise = promise;
-        manager = (UsbManager)this.reactContext.getSystemService(Context.USB_SERVICE);
-        try{
-            HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
-            Iterator<UsbDevice> deviceIterator = deviceList.values().iterator();
-
-            while (deviceIterator.hasNext()) {
-                UsbDevice device = deviceIterator.next();
-
-                Log.d(TAG, "ral: " + device.toString());
-                Log.d(TAG, "Device: " + device.getDeviceName() + " " + device.getDeviceId() + " " + device.getVendorId() + " " + device.getProductId());
-
-                final Map<String, String> deviceInfo = new HashMap<>();
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    deviceInfo.put("deviceName", device.getManufacturerName());
-                }else {
-                    deviceInfo.put("deviceName", device.getDeviceName());
-                }
-                deviceInfo.put("deviceId", String.valueOf(device.getDeviceId()));
-                deviceInfo.put("vendorId", String.valueOf(device.getVendorId()));
-                deviceInfo.put("productId", String.valueOf(device.getProductId()));
-
-                WritableNativeMap writableMap = new WritableNativeMap();
-                
-                for (Map.Entry<String, String> entry : deviceInfo.entrySet()) {
-                    writableMap.putString(entry.getKey(), entry.getValue());
-                }
-                
-                promise.resolve(writableMap);
-                this.device = deviceList.get(device.getDeviceName());
-            }
-        } catch (Exception e) {
-            promise.reject("Create Event Error", e);
-            throw new RuntimeException(e);
+    public void listDevices(Promise promise) {
+        // get the list of devices from the usb manager and return it to react native as a promise with a readable map
+        HashMap<String, UsbDevice> deviceList = usbManager.getDeviceList();
+        WritableMap map = Arguments.createMap();
+        for (Map.Entry<String, UsbDevice> entry : deviceList.entrySet()) {
+            UsbDevice device = entry.getValue();
+            WritableMap deviceMap = Arguments.createMap();
+            deviceMap.putString("deviceName", device.getDeviceName());
+            deviceMap.putString("deviceClass", String.valueOf(device.getDeviceClass()));
+            deviceMap.putString("deviceSubclass", String.valueOf(device.getDeviceSubclass()));
+            deviceMap.putString("vendorId", String.valueOf(device.getVendorId()));
+            deviceMap.putString("productId", String.valueOf(device.getProductId()));
+            map.putMap(device.getDeviceName(), deviceMap);
         }
+        promise.resolve(map);
     }
 
     @ReactMethod
-    public void ConnectUsbDevices(int vendorId, int productId, Promise promise) {
-        PendingIntent permissionIntent = PendingIntent.getBroadcast(this.reactContext, 0, new Intent(ACTION_USB_PERMISSION), 0);
-        IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
-        this.reactContext.registerReceiver(usbReceiver, filter);
+    public void connect(){
+        
+    }
+    private void connectDpad(UsbDevice device) {
+        if (mDpadConnector != null) {
+            // Device is already connected
+            Log.d(TAG, "device is already connected");
+            return;
+        }
 
-        manager.requestPermission(device, permissionIntent);
-        Log.d(TAG, "The Permission success");
-        UsbInterface intf = device.getInterface(0);
-        UsbEndpoint endpoint = intf.getEndpoint(0);
+        UsbManager manager = (UsbManager) this.mReactContext.getSystemService(Context.USB_SERVICE);
 
-        connection = manager.openDevice(device);
-        Log.d(TAG, "The openDevice has success");
-
-        byte[] dataToSend = "o".getBytes();
-        bytes = new byte[dataToSend.length];
-
-        connection.claimInterface(intf, forceClaim);
-        Log.d(TAG, "The claimInterface has success");
-        connection.bulkTransfer(endpoint, bytes, bytes.length, TIMEOUT);
-        Log.d(TAG, "The connection has initialize successfully");
-
-        request = new UsbRequest();
-
-        int endpointAddress = UsbConstants.USB_DIR_IN | 2;
-        this.endpoint = device.getInterface(0).getEndpoint(endpointAddress);
-
-        request.initialize(connection, endpoint);
-        Log.d(TAG, "The request has initialize successfully");
-
-        this.buffer = ByteBuffer.allocate(bytes.length);
-
-        request.queue(buffer, bytes.length);
-
-        if (request.queue(buffer, dataToSend.length)){
-            Log.d(TAG, "The queue has good start");
-            boolean resultReceived = false;
-            while (!resultReceived) {
-                if (connection.requestWait() == request) {
-                    Log.d(TAG, "The request has completed successfully");
-                    byte[] receivedData = buffer.array();
-                    // Process the received data here
-                    resultReceived = true;
-                } else {
-                    Log.d(TAG, "The request has failed");
+        if (device == null) {
+            for (UsbDevice d: manager.getDeviceList().values()) {
+                if (manager.hasPermission(d)) {
+                    device = d;
                     break;
                 }
             }
         }
 
+        if (device != null) {
+            mDpadConnector = DpadConnector.create(this.mReactContext, manager, device, new DpadConnector.OnCommandReceivedListener() {
+                @Override
+                public void onIdentReceived(String ident) {
+                    setInfo(ident);
+                }
+
+                @Override
+                public void onKeyReceived(int action, int keyCode) {
+//                  if (mDpadViewListener != null) {
+//                      mDpadViewListener.onKeyPress(action, keyCode);
+//                  }
+                    //TODO: send info to react
+                }
+            });
+
+            if (mDpadConnector != null) {
+                mDpadConnector.requestIdent();
+            }
+        }
     }
-    
+
+
+
+    private void registerReceivers() {
+        // Register receiver to notify when USB device is detached.
+        this.mReactContext.registerReceiver(mUsbDeviceDetachedReceiver, new IntentFilter(UsbManager
+                .ACTION_USB_DEVICE_DETACHED));
+    }
+
+    private void closeDpad(UsbDevice device) {
+        boolean closeDevice = false;
+
+        if (mDpadConnector != null) {
+            if (device != null) {
+                closeDevice = mDpadConnector.isDeviceAttached(device);
+            } else  {
+                closeDevice = true;
+            }
+        }
+
+        if (closeDevice) {
+            mDpadConnector.close();
+            mDpadConnector = null;
+        }
+    }
+    @ReactMethod
+    private void updateDpad() {
+        boolean available = mDpadConnector != null;
+        try{
+            if (available) {
+                Log.d(TAG, "updateDpad: " + available);
+            } else {
+                Log.d(TAG, "updateDpad: " + available);
+                setInfo("");
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void setInfo(String s) {
+        Log.d(TAG, "setInfo() - s=" + s);
+//        TextView infoView = findViewById(R.id.info);
+//        infoView.setText(s);
+    }
+
+    private class UsbDeviceDetachedReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(intent.getAction())) {
+                UsbDevice device  = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                closeDpad(device);
+                updateDpad();
+            }
+        }
+    }
+
+    private final UsbDeviceDetachedReceiver mUsbDeviceDetachedReceiver = new UsbDeviceDetachedReceiver();
 }
-
-

@@ -6,7 +6,7 @@ const {ReactNativeSimpleUsb} = NativeModules;
 const NewModuleButton = () => {
     const listUsbDevices = async () => {
         try {
-            const device = await ReactNativeSimpleUsb.listUsbDevices();
+            const device = await ReactNativeSimpleUsb.listDevices();
             console.log(device);
             
         } catch (error) {
@@ -14,11 +14,51 @@ const NewModuleButton = () => {
         }
     };
 
+    const AskUsbDevicesPermission = async () => {
+        try {
+            const device = await ReactNativeSimpleUsb.requestPermission("/dev/bus/usb/001/003");
+            console.log(device);
+
+        } catch (error) {
+            console.error(error);
+        }
+    }
+    
     const ConnectUsbDevices = async () => {
         try {
-            const device = await ReactNativeSimpleUsb.ConnectUsbDevices(12346, 16385);
+            const device = await ReactNativeSimpleUsb.connect("/dev/bus/usb/001/003");
             console.log(device);
             
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    const DisonnectUsbDevices = async () => {
+        try {
+            const device = await ReactNativeSimpleUsb.disconnect();
+            console.log(device);
+            
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    const read = async () => {
+        try {
+            const device = await ReactNativeSimpleUsb.read();
+            console.log(device);
+
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    const write = async () => {
+        try {
+            const device = await ReactNativeSimpleUsb.write("o");
+            console.log(device);
+
         } catch (error) {
             console.error(error);
         }
@@ -32,10 +72,31 @@ const NewModuleButton = () => {
                 onPress={listUsbDevices}
             />
             <Button
+                title="Ask USB Devices Permission"
+                color="#432212"
+                onPress={AskUsbDevicesPermission}
+            />
+            <Button
                 title="Connect to USB Devices"
-                color="#702375"
+                color="#432212"
                 onPress={ConnectUsbDevices}
             />
+            <Button
+                title="Disconnect to USB Devices"
+                color="#432212"
+                onPress={DisonnectUsbDevices}
+            />
+            <Button
+                title="read from USB Devices"
+                color="#432212"
+                onPress={read}
+            />
+            <Button
+                title="write to USB Devices"
+                color="#432212"
+                onPress={write}
+            />
+            
         </>
     );
 };

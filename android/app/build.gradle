@@ -156,6 +156,7 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.0.0")
 
     implementation 'com.github.felHR85:UsbSerial:6.1.0'
+    implementation 'com.github.mik3y:usb-serial-for-android:3.4.6'
 
     debugImplementation("com.facebook.flipper:flipper:${FLIPPER_VERSION}")
     debugImplementation("com.facebook.flipper:flipper-network-plugin:${FLIPPER_VERSION}") {
